@@ -1,0 +1,99 @@
+{
+  "gameMetadata": {
+    "title": "Mago da Floresta: Guardião da Vida",
+    "version": "1.2.0",
+    "canvas": { "width": 960, "height": 540 }
+  },
+  "playerSettings": {
+    "dimensions": { "width": 32, "height": 52 },
+    "attributes": { "initialHp": 100, "maxHp": 100, "initialMana": 100, "maxMana": 100, "manaRegenPerFrame": 0.1 },
+    "physics": { "moveSpeed": 4, "jumpForce": -13, "gravity": 0.6 },
+    "mechanics": { "burnDamagePerTenSteps": 2, "shieldDurationFrames": 240, "attackCooldownFrames": 12 }
+  },
+  "skills": {
+    "offense": [
+      { "id": 0, "name": "Bastão Comum", "damage": 22, "type": "melee", "manaCost": 0 },
+      { "id": 1, "name": "⚡ Cetro do Trovão", "damage": 18, "type": "projectile_light", "speed": 14, "manaCost": 0 },
+      { "id": 2, "name": "🔥 Esfera de Fogo", "damage": 25, "type": "projectile_circle_fire", "speed": 10, "manaCost": 0 },
+      { "id": 3, "name": "🌧️ Nuvem de Chuva", "damage": 1, "type": "aoe_cloud", "manaCost": 35, "durationFrames": 300 }
+    ],
+    "defenseAndHeal": [
+      { "id": 0, "name": "Nenhum", "effect": "none" },
+      { "id": 4, "name": "❇️ Cura Total", "effect": "restore_full_hp" },
+      { "id": 7, "name": "🌀 Energia Vital", "effect": "restore_full_mana_and_twenty_hp" },
+      { "id": 8, "name": "🛡️ Escudo Imunidade", "effect": "grant_total_damage_immunity" },
+      { "id": 9, "name": "✨ Cura Doenças", "effect": "remove_burn_status" }
+    ]
+  },
+  "worlds": {
+    "1": {
+      "name": "Floresta", "gradientColors": ["#1f4037", "#99f2c8"], "groundColor": "#2d5a27", "topGroundColor": "#3d8b37",
+      "levels": {
+        "1": {
+          "length": 3100,
+          "platforms": [{ "x": 0, "y": 460, "w": 1000, "h": 80 }, { "x": 1150, "y": 460, "w": 900, "h": 80 }, { "x": 2200, "y": 460, "w": 1200, "h": 80 }],
+          "pipes": [{ "x": 700, "y": 390, "w": 60, "h": 70, "targetZone": "pipe", "targetX": 150, "targetY": 100 }],
+          "enemies": [{ "x": 500, "y": 420, "w": 30, "h": 40, "hp": 40, "maxHp": 40, "vx": 1.5, "type": "fire_spitter" }, { "x": 1400, "y": 420, "w": 30, "h": 40, "hp": 40, "maxHp": 40, "vx": -1.5, "type": "normal" }],
+          "pickups": [{ "x": 350, "y": 380, "type": 1, "label": "⚡ Raio", "color": "#00d2ff" }], "coins": [{ "x": 450, "y": 400 }]
+        },
+        "2": {
+          "length": 3150,
+          "platforms": [{ "x": 0, "y": 460, "w": 800, "h": 80 }, { "x": 950, "y": 460, "w": 2500, "h": 80 }],
+          "pipes": [], "enemies": [{ "x": 500, "y": 420, "w": 30, "h": 40, "hp": 50, "maxHp": 50, "vx": 1.2, "type": "fire_spitter" }],
+          "pickups": [{ "x": 300, "y": 380, "type": 2, "label": "🔥 Fogo", "color": "#ff416c" }], "coins": []
+        },
+        "3": {
+          "length": 3200,
+          "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }],
+          "pipes": [], "enemies": [{ "x": 600, "y": 420, "w": 30, "h": 40, "hp": 50, "maxHp": 50, "vx": 1.5, "type": "normal" }],
+          "pickups": [{ "x": 400, "y": 380, "type": 4, "label": "❇️ Cura Total", "color": "#39ff14" }], "coins": []
+        },
+        "4": {
+          "length": 3300, "platforms": [{ "x": 0, "y": 460, "w": 3500, "h": 80 }],
+          "pipes": [], "enemies": [{ "x": 1400, "y": 340, "w": 80, "h": 120, "hp": 350, "maxHp": 350, "vx": 1.5, "type": "boss_forest" }],
+          "pickups": [{ "x": 500, "y": 380, "type": 3, "label": "🌧️ Chuva", "color": "#8a2be2" }], "coins": []
+        }
+      }
+    },
+    "2": {
+      "name": "Água", "gradientColors": ["#0575e6", "#00f260"], "groundColor": "#104e5b", "topGroundColor": "#1c8598",
+      "levels": {
+        "1": {
+          "length": 2900, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [],
+          "enemies": [{ "x": 600, "y": 420, "w": 30, "h": 40, "hp": 60, "maxHp": 60, "vx": 1.6, "type": "normal" }],
+          "pickups": [{ "x": 400, "y": 380, "type": 7, "label": "🌀 Energia", "color": "#00ffff" }], "coins": []
+        },
+        "2": { "length": 3000, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [], "enemies": [], "pickups": [], "coins": [] },
+        "3": { "length": 3000, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [], "enemies": [], "pickups": [], "coins": [] },
+        "4": {
+          "length": 3300, "platforms": [{ "x": 0, "y": 460, "w": 3500, "h": 80 }], "pipes": [],
+          "enemies": [{ "x": 1400, "y": 350, "w": 90, "h": 110, "hp": 450, "maxHp": 450, "vx": 1.2, "type": "boss_turtle" }],
+          "pickups": [{ "x": 300, "y": 380, "type": 8, "label": "🛡️ Proteção", "color": "#ffd700" }], "coins": []
+        }
+      }
+    },
+    "3": {
+      "name": "Cemitério", "gradientColors": ["#141517", "#4b4e54"], "groundColor": "#212121", "topGroundColor": "#3a3a3a",
+      "levels": {
+        "1": {
+          "length": 3000, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [],
+          "enemies": [{ "x": 600, "y": 420, "w": 30, "h": 40, "hp": 80, "maxHp": 80, "vx": 1.8, "type": "normal" }],
+          "pickups": [], "coins": []
+        },
+        "2": { "length": 3000, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [], "enemies": [], "pickups": [], "coins": [] },
+        "3": { "length": 3000, "platforms": [{ "x": 0, "y": 460, "w": 3200, "h": 80 }], "pipes": [], "enemies": [], "pickups": [], "coins": [] },
+        "4": {
+          "length": 3400, "platforms": [{ "x": 0, "y": 460, "w": 3600, "h": 80 }], "pipes": [],
+          "enemies": [{ "x": 1400, "y": 330, "w": 100, "h": 130, "hp": 600, "maxHp": 600, "vx": 2.0, "type": "boss_horse" }],
+          "pickups": [{ "x": 400, "y": 380, "type": 9, "label": "✨ Cura Doenças", "color": "#e066ff" }], "coins": []
+        }
+      }
+    }
+  },
+  "secretZone": {
+    "zoneName": "pipe", "length": 1000, "platforms": [{ "x": 0, "y": 460, "w": 900, "h": 80 }],
+    "pipes": [{ "x": 750, "y": 390, "w": 60, "h": 70, "targetZone": "surface", "targetX": 730, "targetY": 300 }],
+    "enemies": [], "pickups": [],
+    "coins": [{ "x": 250, "y": 400 }, { "x": 300, "y": 400 }, { "x": 350, "y": 400 }, { "x": 400, "y": 400 }, { "x": 450, "y": 400 }, { "x": 500, "y": 400 }, { "x": 550, "y": 400 }]
+  }
+}

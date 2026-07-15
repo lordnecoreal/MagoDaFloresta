@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Mago da Floresta: Guardião da Vida</title>
+<style>
+    body {
+        margin: 0; overflow: hidden; background: #090f0a;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        display: flex; justify-content: center; align-items: center; height: 100vh; user-select: none;
+    }
+    #gameContainer { position: relative; box-shadow: 0 0 25px rgba(0,0,0,0.9); border: 4px solid #143216; border-radius: 8px; }
+    canvas { display: block; }
+    #hud {
+        position: absolute; left: 20px; top: 20px; color: #fff; background: rgba(8, 20, 10, 0.9);
+        padding: 12px; border-radius: 8px; border: 2px solid #448c44; width: 290px;
+        text-shadow: 1px 1px 2px #000; pointer-events: none; font-size: 13px;
+    }
+    #worldIndicator {
+        position: absolute; right: 20px; top: 20px; color: #ffd700; background: rgba(8, 20, 10, 0.9);
+        padding: 8px 16px; border-radius: 8px; border: 2px solid #448c44; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 2px #000;
+    }
+    .bar-container { background: #333; border: 1px solid #000; height: 10px; border-radius: 5px; margin: 3px 0 6px 0; overflow: hidden; }
+    .bar-hp { background: #ff3b30; width: 100%; height: 100%; }
+    .bar-mana { background: #007aff; width: 100%; height: 100%; }
+    .skill-text { font-weight: bold; color: #ffd700; }
+    .status-alert { font-weight: bold; color: #ff9500; }
+    .controls-info { font-size: 11px; color: #bbb; border-top: 1px solid #444; margin-top: 5px; padding-top: 5px; }
+    #restartBtn {
+        display: none; position: absolute; top: 65%; left: 50%; transform: translate(-50%, -50%);
+        padding: 12px 35px; font-size: 20px; font-weight: bold; color: #fff; background: #27ae60;
+        border: 2px solid #fff; border-radius: 5px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+    #restartBtn:hover { background: #2ecc71; }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div id="hud">
+        <div style="font-size: 15px; margin-bottom: 3px;"><strong>PONTOS: <span id="scoreVal" style="color:#ffd700">0</span></strong></div>
+        <div><strong>VIDA:</strong></div>
+        <div class="bar-container"><div id="hpBar" class="bar-hp"></div></div>
+        
+        <div><strong>MANA:</strong></div>
+        <div class="bar-container"><div id="manaBar" class="bar-mana"></div></div>
+        
+        <div>Status: <span id="txtStatus" style="color:#fff">Saudável</span></div>
+        <div>Ataque (Z): <span id="txtOffense" class="skill-text">Carregando...</span></div>
+        <div>Cura/Defesa (X): <span id="txtHeal" class="skill-text">Carregando...</span></div>
+        
+        <div class="controls-info">
+            Setas: Mover/Virar | Seta Baixo: Entrar no Cano Sólido<br>
+            C: Pular | Z: Atacar | X: Usar Habilidade Secundária
+        </div>
+    </div>
+    
+    <div id="worldIndicator">Carregando mapa...</div>
+    <button id="restartBtn" onclick="initGame()">Jogar novamente</button>
+    <canvas id="game" width="960" height="540"></canvas>
+</div>
+
+<script>
+const c = document.getElementById("game");
+const ctx = c.getContext("2d");
+const restartBtn = document.getElementById("restartBtn");
+
+const keys = {};
+document.onkeydown = e => keys[e.key.toLowerCase()] = true;
+document.onkeyup = e => keys[e.key.toLowerCase()] = false;
+
+// Configurações vindas do JSON
+let db = null;
+
+let player, camera, gameOver, gameWon, score, currentWorld, currentLevel, currentZone;
+let platforms = [], enemies = [], pickups = [], coins = [], pipes = [], proj = [], enemyProj = [];
+let clouds = [], drops = [], flagstaff = null, goal = null;
+let lastAttackKey = false, lastHealKey = false, stepCounter = 0, animFrame = 0;
+
+// Carregar o banco de dados JSON externo
+async function loadGameData() {
+    try {
+        const response = await fetch('mago.json');
+        db = await response.json();
+        initGame();
+        loop();
+    } catch (error) {
+        console.error("Erro ao carregar o arquivo mago.json:", error);
+        document.getElementById("worldIndicator").innerText = "Erro ao carregar JSON!";
+    }
+}
+
+function initGame() {
+    if (!db) return;
+    score = 0; player = null;
+    loadLevel(1, 1, "surface");
+    gameOver = false; gameWon = false;
+    restartBtn.style.display = "none";
+}
+
+function loadLevel(wNum, lNum, zone) {
+    currentWorld = wNum; currentLevel = lNum; currentZone = zone;
+    
+    let pSettings = db.playerSettings;
+    let lvl = zone === "surface" ? db.worlds[wNum].levels[lNum] : db.secretZone;
+    
+    document.getElementById("worldIndicator").innerText = zone === "surface" ? `Mundo ${wNum}-${lNum}` : "Cano Secreto";
+    
+    if (!player) {
+        player = {
+            x: 100, y: 300, w: pSettings.dimensions.width, h: pSettings.dimensions.height, vx: 0, vy: 0,
+            hp: pSettings.attributes.initialHp, maxHp: pSettings.attributes.maxHp, 
+            mana: pSettings.attributes.initialMana, maxMana: pSettings.attributes.maxMana,
+            jump: false, direction: 1, offense: 0, healSlot: 0,
+            shieldTime: 0, isAttacking: 0, status: "healthy"
+        };
+    } else {
+        player.x = 100; player.y = 300; player.vx = 0; player.vy = 0;
+    }
+    
+    camera = 0; proj = []; enemyProj = []; clouds = []; drops = [];
+    platforms = lvl.platforms.map(p => ({...p}));
+    pipes = lvl.pipes.map(p => ({...p}));
+    pickups = JSON.parse(JSON.stringify(lvl.pickups));
+    coins = JSON.parse(JSON.stringify(lvl.coins));
+    enemies = lvl.enemies.map(e => ({...e, poison:0, shootCooldown: 60}));
+    
+    if(zone === "surface") {
+        flagstaff = { x: lvl.length - 350, y: 160, w: 10, h: 300, flagY: 170, collected: false };
+        goal = { x: lvl.length - 150, y: 460 - 120, w: 80, h: 120 };
+    } else {
+        flagstaff = null; goal = null;
+    }
+}
+
+function rectCollision(a, b) {
+    return (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y);
+}
+
+function blockSolids(ent) {
+    let blocks = [...platforms, ...pipes];
+    blocks.forEach(b => {
+        if (rectCollision(ent, b)) {
+            let overlapX = Math.min(ent.x + ent.w - b.x, b.x + b.w - ent.x);
+            let overlapY = Math.min(ent.y + ent.h - b.y, b.y + b.h - ent.y);
+            
+            if (overlapX < overlapY) {
+                if (ent.x + ent.w / 2 < b.x + b.w / 2) ent.x -= overlapX;
+                else ent.x += overlapX;
+                if(!ent.hp && ent.vx) ent.vx *= -1;
+            } else {
+                if (ent.y + ent.h / 2 < b.y + b.h / 2) {
+                    ent.y -= overlapY; ent.vy = 0; ent.jump = false;
+                } else {
+                    ent.y += overlapY; if(ent.vy < 0) ent.vy = 0;
+                }
+            }
+        }
+    });
+}
+
+function isBossAlive() {
+    if (currentLevel !== 4 || currentZone !== "surface") return false;
+    return enemies.some(e => e.type.includes("boss") && e.hp > 0);
+}
+
+function handleAttack() {
+    let skill = db.skills.offense[player.offense];
+    player.isAttacking = db.playerSettings.mechanics.attackCooldownFrames;
+    
+    let hitBox = {
+        x: player.direction === 1 ? player.x + player.w : player.x - 45,
+        y: player.y, w: 45, h: player.h
+    };
+    
+    enemies.forEach(e => {
+        if(e.hp > 0 && rectCollision(hitBox, e)) {
+            e.hp -= db.skills.offense[0].damage; // Dano base físico
+            e.x += player.direction * 30;
+            if(e.hp <= 0) score += e.type.includes("boss") ? 1000 : 100;
+        }
+    });
+
+    if(player.offense === 1) { 
+        proj.push({ x: player.x + player.w/2, y: player.y + 20, vx: player.direction * skill.speed, type: "light", w: 25, h: 8, r: 4 });
+    } else if(player.offense === 2) { 
+        proj.push({ x: player.x + player.w/2, y: player.y + 20, vx: player.direction * skill.speed, type: "fire", w: 16, h: 16, r: 8 });
+    } else if(player.offense === 3) { 
+        if(player.mana >= skill.manaCost) {
+            player.mana -= skill.manaCost;
+            clouds.push({ x: player.x + (player.direction * 150) - 60, y: 60, w: 110, h: 30, duration: skill.durationFrames });
+        }
+    }
+}
+
+function handleHeal() {
+    if(player.healSlot === 0) return;
+    switch(player.healSlot) {
+        case 4: player.hp = player.maxHp; break;
+        case 7: player.mana = player.maxMana; player.hp = Math.min(player.maxHp, player.hp + 20); break;
+        case 8: player.shieldTime = db.playerSettings.mechanics.shieldDurationFrames; break;
+        case 9: player.status = "healthy"; break; 
+    }
+}
+
+function update() {
+    if (gameOver || gameWon || !db) return;
+    animFrame++;
+
+    let pSettings = db.playerSettings;
+    if(player.mana < player.maxMana) player.mana = Math.min(player.maxMana, player.mana + pSettings.attributes.manaRegenPerFrame);
+
+    let oldX = player.x;
+    player.vx = 0;
+    if (keys["arrowleft"]) { player.vx = -pSettings.physics.moveSpeed; player.direction = -1; }
+    if (keys["arrowright"]) { player.vx = pSettings.physics.moveSpeed; player.direction = 1; }
+    
+    if (isBossAlive() && player.x + player.vx > 1800) {
+        player.vx = 0;
+    }
+    player.x += player.vx;
+
+    if(Math.abs(player.x - oldX) > 0.5) {
+        if(player.status === "burned") {
+            stepCounter++;
+            if(stepCounter >= 10) { 
+                if(player.shieldTime <= 0) player.hp -= pSettings.mechanics.burnDamagePerTenSteps; 
+                stepCounter = 0; 
+            }
+        }
+    }
+
+    if (keys["c"] && !player.jump) { player.vy = pSettings.physics.jumpForce; player.jump = true; }
+    player.vy += pSettings.physics.gravity; player.y += player.vy;
+
+    blockSolids(player);
+
+    if(keys["arrowdown"]) {
+        pipes.forEach(p => {
+            if(Math.abs((player.x + player.w/2) - (p.x + p.w/2)) < 25 && Math.abs((player.y + player.h) - p.y) < 12) {
+                loadLevel(currentWorld, currentLevel, p.targetZone);
+                player.x = p.targetX; player.y = p.targetY;
+            }
+        });
+    }
+
+    if (player.y > 540) { player.hp = 0; gameOver = true; restartBtn.style.display = "block"; }
+
+    if(player.isAttacking > 0) player.isAttacking--;
+    if(player.shieldTime > 0) player.shieldTime--;
+
+    if (keys["z"] && !lastAttackKey) handleAttack();
+    lastAttackKey = keys["z"];
+    if (keys["x"] && !lastHealKey) handleHeal();
+    lastHealKey = keys["x"];
+
+    camera = player.x - 250;
+    if(camera < 0) camera = 0;
+
+    clouds.forEach((cl, idx) => {
+        cl.duration--;
+        if(cl.duration % 3 === 0) drops.push({ x: cl.x + Math.random() * cl.w, y: cl.y + cl.h, vy: 7, w: 3, h: 10 });
+        if(cl.duration <= 0) clouds.splice(idx, 1);
+    });
+
+    for(let i = drops.length - 1; i >= 0; i--) {
+        let d = drops[i]; d.y += d.vy;
+        enemies.forEach(e => {
+            if(e.hp > 0 && rectCollision(d, e)) {
+                e.hp -= db.skills.offense[3].damage; e.poison = 90;
+                if(e.hp <= 0) score += e.type.includes("boss") ? 1000 : 100;
+            }
+        });
+        if(d.y > 460) drops.splice(i, 1);
+    }
+
+    for (let i = proj.length - 1; i >= 0; i--) {
+        let p = proj[i]; p.x += p.vx;
+        enemies.forEach(e => {
+            if (e.hp > 0 && rectCollision(p, e)) {
+                e.hp -= p.type === "fire" ? db.skills.offense[2].damage : db.skills.offense[1].damage; 
+                proj.splice(i, 1);
+                if(e.hp <= 0) score += e.type.includes("boss") ? 1000 : 100;
+            }
+        });
+    }
+
+    for(let i = enemyProj.length - 1; i >= 0; i--) {
+        let ep = enemyProj[i]; ep.x += ep.vx;
+        if(rectCollision(ep, player)) {
+            if(player.shieldTime <= 0) { 
+                player.hp -= 10;
+                if(Math.random() < 0.6) player.status = "burned";
+            }
+            enemyProj.splice(i, 1);
+        }
+    }
+
+    enemies.forEach(e => {
+        if (e.hp <= 0) return;
+        if(e.type === "fire_spitter") {
+            e.shootCooldown--;
+            if(e.shootCooldown <= 0) {
+                let sDir = e.x > player.x ? -5 : 5;
+                enemyProj.push({ x: e.x, y: e.y + 10, vx: sDir, w: 12, h: 12 });
+                e.shootCooldown = 90;
+            }
+        }
+
+        let nextX = e.x + e.vx;
+        let leftSafe = false, rightSafe = false;
+        platforms.forEach(p => {
+            if(nextX >= p.x && nextX <= p.x + p.w && e.y + e.h <= p.y + 5) leftSafe = true;
+            if(nextX + e.w >= p.x && nextX + e.w <= p.x + p.w && e.y + e.h <= p.y + 5) rightSafe = true;
+        });
+        if(!leftSafe || !rightSafe) e.vx *= -1;
+        else e.x += e.vx;
+
+        blockSolids(e);
+
+        if (e.poison > 0) { e.poison--; e.hp -= 0.1; if(e.hp <= 0) score += 100; }
+        if (rectCollision(player, e) && player.shieldTime <= 0) player.hp -= 0.6;
+    });
+
+    if (!isBossAlive() && flagstaff && !flagstaff.collected && rectCollision(player, flagstaff)) {
+        flagstaff.collected = true;
+        let heightBonus = Math.floor((460 - player.y) * 3);
+        score += Math.max(100, heightBonus);
+        flagstaff.flagY = Math.min(430, player.y);
+    }
+
+    for(let i = coins.length - 1; i >= 0; i--) {
+        if(rectCollision(player, {x: coins[i].x, y: coins[i].y, w: 16, h: 16})) { coins.splice(i, 1); score += 50; }
+    }
+    pickups.forEach(p => {
+        if (rectCollision(player, {x: p.x, y: p.y, w: 25, h: 25})) {
+            if (p.type <= 3) player.offense = p.type;
+            else player.healSlot = p.type;
+            p.x = -9999;
+        }
+    });
+
+    if(!isBossAlive() && currentZone === "surface" && goal && rectCollision(player, goal)) {
+        if(currentLevel < 4) loadLevel(currentWorld, currentLevel + 1, "surface");
+        else if(currentWorld < 3) loadLevel(currentWorld + 1, 1, "surface");
+        else gameWon = true;
+    }
+
+    if (player.hp <= 0) { player.hp = 0; gameOver = true; restartBtn.style.display = "block"; }
+
+    document.getElementById("scoreVal").innerText = score;
+    document.getElementById("hpBar").style.width = Math.max(0, player.hp) + "%";
+    document.getElementById("manaBar").style.width = player.mana + "%";
+    document.getElementById("txtStatus").innerHTML = player.status === "burned" ? "<span class='status-alert'>🔥 QUEIMADO (-2 HP p/ movimento)</span>" : "Saudável";
+    
+    document.getElementById("txtOffense").innerText = db.skills.offense[player.offense].name;
+    const findHeal = db.skills.defenseAndHeal.find(h => h.id === player.healSlot);
+    document.getElementById("txtHeal").innerText = findHeal ? findHeal.name : "Nenhum";
+}
+
+function draw() {
+    if (!db) return;
+    ctx.clearRect(0, 0, c.width, c.height);
+    let currentWData = db.worlds[currentWorld];
+    
+    let grad = ctx.createLinearGradient(0, 0, 0, 540);
+    grad.addColorStop(0, currentWData.bgColor ? currentWData.bgColor[0] : currentWData.gradientColors[0]);
+    grad.addColorStop(1, currentWData.bgColor ? currentWData.bgColor[1] : currentWData.gradientColors[1]);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, 960, 540);
+
+    ctx.save(); ctx.translate(-camera, 0);
+
+    platforms.forEach(plat => {
+        ctx.fillStyle = currentWData.groundColor; ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
+        ctx.fillStyle = currentWData.topGroundColor; ctx.fillRect(plat.x, plat.y, plat.w, 6);
+    });
+
+    pipes.forEach(p => {
+        ctx.fillStyle = "#1e7a1e"; ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = "#114a11"; ctx.fillRect(p.x - 4, p.y, p.w + 8, 14);
+    });
+
+    coins.forEach(cn => {
+        ctx.fillStyle = "#ffd700"; ctx.beginPath(); ctx.arc(cn.x + 8, cn.y + 8, 8, 0, Math.PI*2); ctx.fill();
+    });
+    pickups.forEach(p => {
+        if(p.x < 0) return;
+        ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x + 12, p.y + 12, 11, 0, Math.PI * 2); ctx.fill();
+    });
+
+    if(!isBossAlive()) {
+        if(flagstaff) {
+            ctx.fillStyle = "#ffffff"; ctx.fillRect(flagstaff.x, flagstaff.y, flagstaff.w, flagstaff.h);
+            ctx.fillStyle = "#ff3b30"; ctx.fillRect(flagstaff.x + flagstaff.w, flagstaff.flagY, 30, 20);
+        }
+        if(currentZone === "surface" && goal) {
+            ctx.fillStyle = "#8b5a2b"; ctx.fillRect(goal.x + 30, goal.y + 40, 20, 80);
+            ctx.fillStyle = "#1e4620"; ctx.beginPath(); ctx.arc(goal.x + 40, goal.y + 30, 48, 0, Math.PI * 2); ctx.fill();
+        }
+    }
+
+    enemies.forEach(e => {
+        if (e.hp <= 0) return;
+        ctx.fillStyle = e.type.includes("boss") ? "#5c1d1d" : "#3e2723"; ctx.fillRect(e.x, e.y, e.w, e.h);
+        ctx.fillStyle = "#ff0000"; ctx.fillRect(e.vx > 0 ? e.x + e.w - 8 : e.x + 4, e.y + 10, 5, 5);
+        ctx.fillStyle = "#fff"; ctx.font = "bold 11px Arial";
+        
+        if(e.type === "boss_forest") ctx.fillText("👹 GOLEM DA FLORESTA", e.x - 20, e.y - 15);
+        if(e.type === "boss_turtle") ctx.fillText("🐢 TARTARUGA ANCIÃ", e.x - 20, e.y - 15);
+        if(e.type === "boss_horse") ctx.fillText("🐎 CAVALO PESADELO", e.x - 20, e.y - 15);
+
+        if(e.hp < e.maxHp) {
+            let barW = e.w + 10;
+            ctx.fillStyle = "#222"; ctx.fillRect(e.x - 5, e.y - 8, barW, 5);
+            ctx.fillStyle = "#ff3b30"; ctx.fillRect(e.x - 5, e.y - 8, barW * (e.hp / e.maxHp), 5);
+        }
+    });
+    
+    ctx.fillStyle = "#ff5722"; enemyProj.forEach(ep => { ctx.beginPath(); ctx.arc(ep.x, ep.y, 6, 0, Math.PI*2); ctx.fill(); });
+    
+    clouds.forEach(cl => { 
+        ctx.fillStyle = "#e2e2e2";
+        ctx.beginPath();
+        ctx.arc(cl.x + 20, cl.y + 20, 20, 0, Math.PI * 2);
+        ctx.arc(cl.x + 45, cl.y + 12, 24, 0, Math.PI * 2);
+        ctx.arc(cl.x + 75, cl.y + 20, 20, 0, Math.PI * 2);
+        ctx.fillRect(cl.x + 20, cl.y + 10, 55, 25);
+        ctx.fill();
+    });
+    
+    ctx.fillStyle = "#9c27b0"; drops.forEach(d => { ctx.fillRect(d.x, d.y, d.w, d.h); });
+    
+    proj.forEach(p => { 
+        ctx.fillStyle = p.type === "fire" ? "#ff4500" : "#00ffff"; 
+        if (p.type === "fire") {
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+        } else {
+            ctx.fillRect(p.x, p.y, p.w, p.h); 
+        }
+    });
+
+    let walkCycle = (Math.abs(player.vx) > 0.1) ? Math.sin(animFrame * 0.2) * 4 : 0;
+    
+    ctx.fillStyle = "#1b4d22"; ctx.fillRect(player.x, player.y + 12, player.w, player.h - 12);
+    ctx.fillStyle = "#4a3b32";
+    ctx.fillRect(player.x + 4, player.y + player.h - 4 + (walkCycle > 0 ? 2 : -2), 8, 4);
+    ctx.fillRect(player.x + 20, player.y + player.h - 4 + (walkCycle < 0 ? 2 : -2), 8, 4);
+
+    ctx.fillStyle = "#ffdbac"; let fX = player.direction === 1 ? player.x + 14 : player.x + 2;
+    ctx.fillRect(fX, player.y + 10, 16, 14);
+    ctx.fillStyle = (animFrame % 140 < 6) ? "#ffdbac" : "#000"; 
+    let eyeOffset = player.direction === 1 ? fX + 10 : fX + 2;
+    ctx.fillRect(eyeOffset, player.y + 14, 3, 4);
+
+    ctx.fillStyle = "#143d1a";
+    ctx.fillRect(player.x - 4, player.y + 6, player.w + 8, 4); 
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y + 6);
+    ctx.lineTo(player.x + player.w / 2, player.y - 12); 
+    ctx.lineTo(player.x + player.w, player.y + 6);
+    ctx.fill();
+
+    if(player.shieldTime > 0) {
+        ctx.strokeStyle = "rgba(255, 215, 0, 0.8)"; ctx.lineWidth = 4;
+        ctx.shadowColor = "#ffd700"; ctx.shadowBlur = 15;
+        ctx.beginPath(); ctx.arc(player.x + player.w/2, player.y + player.h/2, 36, 0, Math.PI*2); ctx.stroke();
+        ctx.shadowBlur = 0; 
+    }
+
+    ctx.fillStyle = "#7a4a21"; ctx.save();
+    let staffX = player.direction === 1 ? player.x + player.w + 2 : player.x - 8;
+    
+    if(player.isAttacking > 0) {
+        ctx.translate(player.x + player.w/2, player.y + player.h/2);
+        ctx.rotate(player.direction * Math.PI / 2.3);
+        ctx.fillRect(-3, -32, 6, 50);
+        
+        let colorsGlow = ["#4caf50", "#00ffff", "#ff4500", "#8a2be2"];
+        ctx.fillStyle = colorsGlow[player.offense];
+        ctx.shadowColor = colorsGlow[player.offense]; ctx.shadowBlur = 20; 
+        ctx.beginPath(); ctx.arc(3, -34, 7, 0, Math.PI*2); ctx.fill();
+    } else {
+        ctx.fillRect(staffX, player.y + 14, 6, 40);
+        let colorsGlow = ["#4caf50", "#00ffff", "#ff4500", "#8a2be2"];
+        ctx.fillStyle = colorsGlow[player.offense];
+        ctx.beginPath(); ctx.arc(staffX + 3, player.y + 10, 5, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore(); ctx.restore();
+
+    if (gameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(0, 0, 960, 540);
+        ctx.fillStyle = "#ff3b30"; ctx.font = "bold 50px Arial"; ctx.fillText("GAME OVER", 330, 220);
+    }
+    if (gameWon) {
+        ctx.fillStyle = "rgba(10, 40, 20, 0.95)"; ctx.fillRect(0, 0, 960, 540);
+        ctx.fillStyle = "#39ff14"; ctx.font = "bold 45px Arial"; ctx.fillText("PARABÉNS! JOGO CONCLUÍDO!", 180, 250);
+    }
+}
+
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+// Inicia a aplicação baixando as configurações do JSON
+loadGameData();
+</script>
+
+</body>
+</html>
